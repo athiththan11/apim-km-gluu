@@ -1,4 +1,4 @@
-package org.wso2.gluu.client.client;
+package org.wso2.gluu.client.kmclient;
 
 import org.wso2.gluu.client.model.IntrospectInfo;
 

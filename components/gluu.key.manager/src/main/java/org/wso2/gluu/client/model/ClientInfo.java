@@ -31,6 +31,8 @@ public class ClientInfo {
     private String subjectType;
     @SerializedName("response_types")
     private List<String> responseTypes;
+    @SerializedName("access_token_as_jwt")
+    private boolean accessTokenAsJWT;
 
     public String getClientId() {
         return clientId;
@@ -126,6 +128,14 @@ public class ClientInfo {
 
     public void setResponseTypes(List<String> responseTypes) {
         this.responseTypes = responseTypes;
+    }
+
+    public boolean isAccessTokenAsJWT() {
+        return accessTokenAsJWT;
+    }
+
+    public void setAccessTokenAsJWT(boolean accessTokenAsJWT) {
+        this.accessTokenAsJWT = accessTokenAsJWT;
     }
 
 }

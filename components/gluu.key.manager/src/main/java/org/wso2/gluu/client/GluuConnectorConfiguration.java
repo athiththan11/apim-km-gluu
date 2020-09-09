@@ -13,7 +13,7 @@ public class GluuConnectorConfiguration implements KeyManagerConnectorConfigurat
 
     @Override
     public String getImplementation() {
-        return GluuOAuthClient.class.getName();
+        return GluuKeyManagerClient.class.getName();
     }
 
     @Override
@@ -30,9 +30,8 @@ public class GluuConnectorConfiguration implements KeyManagerConnectorConfigurat
     public List<ConfigurationDto> getApplicationConfigurations() {
         List<ConfigurationDto> configurationDtoList = new ArrayList<>();
         configurationDtoList.add(new ConfigurationDto("response_types", "Response Type", "select",
-                "Type of token response", "", false, false, Arrays.asList("token code", "code id_token", "token id_token", "token",
-                        "code", "token code id_token", "id_token"),
-                true));
+                "Type of token response", "", false, false, Arrays.asList("token", "code", "id_token"), true));
+
         configurationDtoList.add(new ConfigurationDto("token_endpoint_auth_method",
                 "Token endpoint Authentication Method", "select", "How to Authenticate Token Endpoint",
                 "client_secret_basic", true, false, Arrays.asList("client_secret_basic", "client_secret_post",

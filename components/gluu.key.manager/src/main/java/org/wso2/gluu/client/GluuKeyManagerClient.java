@@ -44,11 +44,13 @@ import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.AbstractKeyManager;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
+import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
-import org.wso2.gluu.client.client.GluuDCRClient;
-import org.wso2.gluu.client.client.IntrospectionClient;
+import org.wso2.gluu.client.kmclient.DCRClient;
+import org.wso2.gluu.client.kmclient.IntrospectionClient;
 import org.wso2.gluu.client.model.AccessTokenResponse;
 import org.wso2.gluu.client.model.ClientInfo;
 import org.wso2.gluu.client.model.IntrospectInfo;
@@ -56,27 +58,26 @@ import org.wso2.gluu.client.model.IntrospectInfo;
 import feign.Feign;
 import feign.gson.GsonDecoder;
 import feign.gson.GsonEncoder;
-import feign.okhttp.OkHttpClient;
 import feign.slf4j.Slf4jLogger;
 
 /**
  * Key manager implementation to integrate Gluu server with WSO2 API Manager
  */
-public class GluuOAuthClient extends AbstractKeyManager {
+public class GluuKeyManagerClient extends AbstractKeyManager {
 
-    private GluuDCRClient gluuDCRClient;
+    private DCRClient dcrClient;
     private IntrospectionClient introspectionClient;
 
-    private static final Log log = LogFactory.getLog(GluuOAuthClient.class);
+    private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
 
     @Override
     public OAuthApplicationInfo createApplication(OAuthAppRequest oauthAppRequest) throws APIManagementException {
         OAuthApplicationInfo oauthApplicationInfo = oauthAppRequest.getOAuthApplicationInfo();
         if (oauthApplicationInfo != null) {
-            ClientInfo clientInfo = createClientInfoFromOAuthApplicationInfo(oauthApplicationInfo);
-            ClientInfo createdApplication = gluuDCRClient.createApplication(clientInfo);
+            ClientInfo clientInfo = createClientInfo(oauthApplicationInfo);
+            ClientInfo createdApplication = dcrClient.createApplication(clientInfo);
             if (createdApplication != null) {
-                return createOAuthAppInfoFromResponse(createdApplication);
+                return createOAuthApplicationInfo(createdApplication);
             }
         }
         return null;
@@ -90,7 +91,7 @@ public class GluuOAuthClient extends AbstractKeyManager {
      * @return {@link ClientInfo} object
      */
     @SuppressWarnings("unchecked")
-    private ClientInfo createClientInfoFromOAuthApplicationInfo(OAuthApplicationInfo oauthApplicationInfo) {
+    private ClientInfo createClientInfo(OAuthApplicationInfo oauthApplicationInfo) {
         ClientInfo clientInfo = new ClientInfo();
         String userId = (String) oauthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_USERNAME);
         String userNameForSp = MultitenantUtils.getTenantAwareUsername(userId);
@@ -123,6 +124,9 @@ public class GluuOAuthClient extends AbstractKeyManager {
             clientInfo.setRedirectUris(Arrays.asList(redirectUris));
         }
 
+        // set access token generation as JWT token
+        clientInfo.setAccessTokenAsJWT(true);
+
         Object parameter = oauthApplicationInfo.getParameter(APIConstants.JSON_ADDITIONAL_PROPERTIES);
         Map<String, Object> additionalProperties = new HashMap<>();
         if (parameter instanceof String) {
@@ -149,7 +153,7 @@ public class GluuOAuthClient extends AbstractKeyManager {
      * @param application response received from server as {@link ClientInfo}
      * @return {@code OAuthApplicationInfo} object
      */
-    private OAuthApplicationInfo createOAuthAppInfoFromResponse(ClientInfo application) {
+    private OAuthApplicationInfo createOAuthApplicationInfo(ClientInfo application) {
         OAuthApplicationInfo appInfo = new OAuthApplicationInfo();
         appInfo.setClientName(application.getClientName());
         appInfo.setClientId(application.getClientId());
@@ -185,11 +189,19 @@ public class GluuOAuthClient extends AbstractKeyManager {
             String clientId = oauthApplicationInfo.getClientId();
             String registrationAccessToken = getRegistrationAccessToken(clientId);
             if (registrationAccessToken != null) {
-                ClientInfo clientInfo = createClientInfoFromOAuthApplicationInfo(oauthApplicationInfo);
-                ClientInfo updatedApplication = gluuDCRClient.updateApplication(clientInfo, clientId,
-                        registrationAccessToken);
+                ClientInfo clientInfo = createClientInfo(oauthApplicationInfo);
+
+                // alternate way of handling query parameters and header parameters for the PUT
+                // resource in feign
+                Map<String, Object> queryMap = new HashMap<>();
+                queryMap.put("client_id", clientId);
+
+                Map<String, Object> headerMap = new HashMap<>();
+                headerMap.put("Authorization", "Bearer " + registrationAccessToken);
+
+                ClientInfo updatedApplication = dcrClient.updateApplication(headerMap, queryMap, clientInfo);
                 if (updatedApplication != null) {
-                    return createOAuthAppInfoFromResponse(updatedApplication);
+                    return createOAuthApplicationInfo(updatedApplication);
                 }
             }
         }
@@ -226,7 +238,7 @@ public class GluuOAuthClient extends AbstractKeyManager {
     public void deleteApplication(String consumerKey) throws APIManagementException {
         String registrationAccessToken = getRegistrationAccessToken(consumerKey);
         if (registrationAccessToken != null) {
-            gluuDCRClient.deleteApplication(consumerKey, registrationAccessToken);
+            dcrClient.deleteApplication(consumerKey, registrationAccessToken);
         }
     }
 
@@ -234,8 +246,8 @@ public class GluuOAuthClient extends AbstractKeyManager {
     public OAuthApplicationInfo retrieveApplication(String consumerKey) throws APIManagementException {
         String registrationAccessToken = getRegistrationAccessToken(consumerKey);
         if (registrationAccessToken != null) {
-            ClientInfo clientInfo = gluuDCRClient.getApplication(consumerKey, registrationAccessToken);
-            return createOAuthAppInfoFromResponse(clientInfo);
+            ClientInfo clientInfo = dcrClient.getApplication(consumerKey, registrationAccessToken);
+            return createOAuthApplicationInfo(clientInfo);
         }
         return null;
     }
@@ -288,6 +300,7 @@ public class GluuOAuthClient extends AbstractKeyManager {
      */
     private AccessTokenResponse getAccessToken(String clientId, String clientSecret, List<NameValuePair> parameters)
             throws APIManagementException {
+
         try (CloseableHttpClient httpClient = HttpClientBuilder.create().build()) {
             String tokenEndpoint = (String) this.configuration.getParameter(APIConstants.KeyManager.TOKEN_ENDPOINT);
             HttpPost httpPost = new HttpPost(tokenEndpoint);
@@ -370,29 +383,22 @@ public class GluuOAuthClient extends AbstractKeyManager {
 
     @Override
     public void loadConfiguration(KeyManagerConfiguration keyManagerConfiguration) throws APIManagementException {
+
         this.configuration = keyManagerConfiguration;
 
-        String clientRegistrationEndpoint = (String) this.configuration
+        String dcrEndpoint = (String) this.configuration
                 .getParameter(APIConstants.KeyManager.CLIENT_REGISTRATION_ENDPOINT);
         String introspectionEndpoint = (String) this.configuration
                 .getParameter(APIConstants.KeyManager.INTROSPECTION_ENDPOINT);
 
-        // FIXME: OkHttpClient with SSL
-        try {
-            OkHttpUtil.init(true);
-        } catch (Exception e) {
-            log.error(e, e);
-        }
-
-        gluuDCRClient = Feign.builder()
-                // .client(new OkHttpClient())
-                .client(new OkHttpClient(OkHttpUtil.getClient())).encoder(new GsonEncoder()).decoder(new GsonDecoder())
-                .logger(new Slf4jLogger()).target(GluuDCRClient.class, clientRegistrationEndpoint);
+        dcrClient = Feign.builder().client(new ApacheFeignHttpClient(APIUtil.getHttpClient(dcrEndpoint)))
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).logger(new Slf4jLogger())
+                .target(DCRClient.class, dcrEndpoint);
 
         introspectionClient = Feign.builder()
-                // .client(new OkHttpClient())
-                .client(new OkHttpClient(OkHttpUtil.getClient())).encoder(new GsonEncoder()).decoder(new GsonDecoder())
-                .logger(new Slf4jLogger()).target(IntrospectionClient.class, introspectionEndpoint);
+                .client(new ApacheFeignHttpClient(APIUtil.getHttpClient(introspectionEndpoint)))
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).logger(new Slf4jLogger())
+                .target(IntrospectionClient.class, introspectionEndpoint);
     }
 
     @Override
