@@ -138,4 +138,14 @@ public class ClientInfo {
         this.accessTokenAsJWT = accessTokenAsJWT;
     }
 
+    @Override
+    public String toString() {
+        return "ClientInfo [accessTokenAsJWT=" + accessTokenAsJWT + ", applicationType=" + applicationType
+                + ", clientId=" + clientId + ", clientIdIssuedTime=" + clientIdIssuedTime + ", clientName=" + clientName
+                + ", clientSecret=" + clientSecret + ", clientSecretExpiresAt=" + clientSecretExpiresAt
+                + ", grantTypes=" + grantTypes + ", redirectUris=" + redirectUris + ", registrationAccessToken="
+                + registrationAccessToken + ", responseTypes=" + responseTypes + ", subjectType=" + subjectType
+                + ", tokenEndpointAuthMethod=" + tokenEndpointAuthMethod + "]";
+    }
+
 }

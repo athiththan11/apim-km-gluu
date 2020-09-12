@@ -23,6 +23,8 @@ public final class GluuConstants {
 
     public static final String ACCESS_TOKEN_ISSUER = "iss";
     public static final String ACCESS_TOKEN_IDENTIFIER = "jti";
+    public static final String CONSUMER_KEY_CLAIM = "client_id";
+    public static final String SCOPE_CLAIM = "scope";
 
     public static final String ERROR_COULD_NOT_READ_HTTP_ENTITY = "Could not read HTTP entity for response ";
     public static final String ERROR_ERROR_OCCURED_WHILE_READING = "Error occured while reading or closing the buffer reader";

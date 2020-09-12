@@ -45,10 +45,13 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.AbstractKeyManager;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
+import org.wso2.carbon.apimgt.impl.kmclient.KMClientErrorDecoder;
+import org.wso2.carbon.apimgt.impl.kmclient.KeyManagerClientException;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
+import org.wso2.gluu.client.decoder.GluuKMErrorDecoder;
 import org.wso2.gluu.client.kmclient.DCRClient;
 import org.wso2.gluu.client.kmclient.IntrospectionClient;
 import org.wso2.gluu.client.model.AccessTokenResponse;
@@ -65,19 +68,66 @@ import feign.slf4j.Slf4jLogger;
  */
 public class GluuKeyManagerClient extends AbstractKeyManager {
 
+    private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
     private DCRClient dcrClient;
     private IntrospectionClient introspectionClient;
 
-    private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
+    /**
+     * method to base64 encode credentials (basic auth)
+     *
+     * @param clientId     consumer-key
+     * @param clientSecret consumer-secret
+     * @return {@code String} encoded string
+     */
+    private static String getEncodedCredentials(String clientId, String clientSecret) {
+        return Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public String getType() {
+        return GluuConstants.GLUU_TYPE;
+    }
+
+    @Override
+    public void loadConfiguration(KeyManagerConfiguration keyManagerConfiguration) throws APIManagementException {
+        this.configuration = keyManagerConfiguration;
+
+        String dcrEndpoint = (String) this.configuration
+                .getParameter(APIConstants.KeyManager.CLIENT_REGISTRATION_ENDPOINT);
+        String introspectionEndpoint = (String) this.configuration
+                .getParameter(APIConstants.KeyManager.INTROSPECTION_ENDPOINT);
+
+        dcrClient = Feign.builder().client(new ApacheFeignHttpClient(APIUtil.getHttpClient(dcrEndpoint)))
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder())
+                .errorDecoder(new GluuKMErrorDecoder())
+                // .errorDecoder(new KMClientErrorDecoder())
+                .logger(new Slf4jLogger()).target(DCRClient.class, dcrEndpoint);
+
+        introspectionClient = Feign.builder()
+                .client(new ApacheFeignHttpClient(APIUtil.getHttpClient(introspectionEndpoint)))
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder())
+                .errorDecoder(new GluuKMErrorDecoder())
+                // .errorDecoder(new KMClientErrorDecoder())
+                .logger(new Slf4jLogger()).target(IntrospectionClient.class, introspectionEndpoint);
+    }
 
     @Override
     public OAuthApplicationInfo createApplication(OAuthAppRequest oauthAppRequest) throws APIManagementException {
         OAuthApplicationInfo oauthApplicationInfo = oauthAppRequest.getOAuthApplicationInfo();
         if (oauthApplicationInfo != null) {
             ClientInfo clientInfo = createClientInfo(oauthApplicationInfo);
-            ClientInfo createdApplication = dcrClient.createApplication(clientInfo);
-            if (createdApplication != null) {
-                return createOAuthApplicationInfo(createdApplication);
+            ClientInfo createdApplication;
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating a Gluu client with client info object: " + clientInfo.toString());
+                }
+
+                createdApplication = dcrClient.createApplication(clientInfo);
+                if (createdApplication != null) {
+                    return createOAuthApplicationInfo(createdApplication);
+                }
+            } catch (KeyManagerClientException e) {
+                handleException("Error occured while trying to create a Gluu client", e);
             }
         }
         return null;
@@ -86,7 +136,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
     /**
      * method to create a {@link ClientInfo} object using an object of
      * {@code OAuthApplicationInfo} to create and update the client
-     * 
+     *
      * @param oauthApplicationInfo object which needs to be converted
      * @return {@link ClientInfo} object
      */
@@ -124,7 +174,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
             clientInfo.setRedirectUris(Arrays.asList(redirectUris));
         }
 
-        // set access token generation as JWT token
+        // set access token generation as JWT token when creating a client in the Gluu
         clientInfo.setAccessTokenAsJWT(true);
 
         Object parameter = oauthApplicationInfo.getParameter(APIConstants.JSON_ADDITIONAL_PROPERTIES);
@@ -144,12 +194,16 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                     (String) additionalProperties.get(GluuConstants.TOKEN_ENDPOINT_AUTH_METHOD));
         }
 
+        if (log.isDebugEnabled()) {
+            log.debug("Constructed client info object: " + clientInfo.toString());
+        }
+
         return clientInfo;
     }
 
     /**
      * method to create {@code OAuthApplicationInfo} object from {@link ClientInfo}
-     * 
+     *
      * @param application response received from server as {@link ClientInfo}
      * @return {@code OAuthApplicationInfo} object
      */
@@ -187,6 +241,11 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         OAuthApplicationInfo oauthApplicationInfo = oauthAppRequest.getOAuthApplicationInfo();
         if (oauthApplicationInfo != null) {
             String clientId = oauthApplicationInfo.getClientId();
+
+            if (log.isDebugEnabled()) {
+                log.debug("Invoking update operation to update Gluu client with consumer key: " + clientId);
+            }
+
             String registrationAccessToken = getRegistrationAccessToken(clientId);
             if (registrationAccessToken != null) {
                 ClientInfo clientInfo = createClientInfo(oauthApplicationInfo);
@@ -199,9 +258,20 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 Map<String, Object> headerMap = new HashMap<>();
                 headerMap.put("Authorization", "Bearer " + registrationAccessToken);
 
-                ClientInfo updatedApplication = dcrClient.updateApplication(headerMap, queryMap, clientInfo);
-                if (updatedApplication != null) {
-                    return createOAuthApplicationInfo(updatedApplication);
+                try {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Updating the Gluu client with Consumer Key: " + clientId
+                                + ", Registration Access Token: " + registrationAccessToken + ", Client Info: "
+                                + clientInfo.toString());
+                    }
+
+                    ClientInfo updatedApplication = dcrClient.updateApplication(headerMap, queryMap, clientInfo);
+                    if (updatedApplication != null) {
+                        return createOAuthApplicationInfo(updatedApplication);
+                    }
+                } catch (KeyManagerClientException e) {
+                    handleException("Error occured while trying to update the Gluu client for the given consumer key: "
+                            + clientId, e);
                 }
             }
         }
@@ -210,7 +280,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
 
     /**
      * method to get registration_access_token of a client application
-     * 
+     *
      * @param consumerKey client-id of the client application
      * @return {@code String} Registration access token
      * @throws APIManagementException
@@ -231,23 +301,61 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 }
             }
         }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Registration access token for the Gluu client with consumer key: " + consumerKey
+                    + " is not found");
+        }
+
         return null;
     }
 
     @Override
     public void deleteApplication(String consumerKey) throws APIManagementException {
+        if (log.isDebugEnabled()) {
+            log.debug("Invoking delete operation to delete Gluu client with consumer key: " + consumerKey);
+        }
+
         String registrationAccessToken = getRegistrationAccessToken(consumerKey);
         if (registrationAccessToken != null) {
-            dcrClient.deleteApplication(consumerKey, registrationAccessToken);
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("Deleting the Gluu client with Consumer Key: " + consumerKey
+                            + ", Registration Access Token:" + registrationAccessToken);
+                }
+
+                dcrClient.deleteApplication(consumerKey, registrationAccessToken);
+            } catch (KeyManagerClientException e) {
+                handleException(
+                        "Error occured while deleting the Gluu client for the given consumer key: " + consumerKey, e);
+            }
+
         }
     }
 
     @Override
     public OAuthApplicationInfo retrieveApplication(String consumerKey) throws APIManagementException {
+        if (log.isDebugEnabled()) {
+            log.debug("Invoking retrieve operation to retrieve Gluu client with consumer key: " + consumerKey);
+        }
+
         String registrationAccessToken = getRegistrationAccessToken(consumerKey);
         if (registrationAccessToken != null) {
-            ClientInfo clientInfo = dcrClient.getApplication(consumerKey, registrationAccessToken);
-            return createOAuthApplicationInfo(clientInfo);
+            ClientInfo clientInfo;
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("Retrieving the Gluu client with Consumer Key: " + consumerKey
+                            + ", Registration Access Token: " + registrationAccessToken);
+                }
+
+                clientInfo = dcrClient.getApplication(consumerKey, registrationAccessToken);
+                if (clientInfo != null) {
+                    return createOAuthApplicationInfo(clientInfo);
+                }
+            } catch (KeyManagerClientException e) {
+                handleException(
+                        "Error occured while retrieving the Gluu client for the given consumer key: " + consumerKey, e);
+            }
         }
         return null;
     }
@@ -257,6 +365,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         String clientId = tokenRequest.getClientId();
         String clientSecret = tokenRequest.getClientSecret();
         Object grantType = tokenRequest.getGrantType();
+
         if (grantType == null) {
             grantType = GluuConstants.GRANT_TYPE_CLIENT_CREDENTIALS;
         }
@@ -273,8 +382,8 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         }
 
         AccessTokenResponse retrievedAccessTokenInfo = getAccessToken(clientId, clientSecret, parameters);
+        AccessTokenInfo accessTokenInfo = new AccessTokenInfo();
         if (retrievedAccessTokenInfo != null) {
-            AccessTokenInfo accessTokenInfo = new AccessTokenInfo();
             accessTokenInfo.setConsumerKey(clientId);
             accessTokenInfo.setConsumerSecret(clientSecret);
             accessTokenInfo.setAccessToken(retrievedAccessTokenInfo.getAccessToken());
@@ -285,12 +394,19 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
             return accessTokenInfo;
         }
 
-        return null;
+        accessTokenInfo.setTokenValid(false);
+        accessTokenInfo.setErrorcode(APIConstants.KeyValidationStatus.API_AUTH_INVALID_CREDENTIALS);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Token validation/generation failed for consumer key: " + clientId);
+        }
+
+        return accessTokenInfo;
     }
 
     /**
      * method to get an access token from Gluu server
-     * 
+     *
      * @param clientId     consumer key of the client
      * @param clientSecret consumer secret of the client
      * @param parameters   list containing {@code NameValuePairs} presenting the
@@ -315,7 +431,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
 
             HttpEntity entity = response.getEntity();
             if (entity == null) {
-                throw new APIManagementException(GluuConstants.ERROR_COULD_NOT_READ_HTTP_ENTITY + response);
+                handleException(GluuConstants.ERROR_COULD_NOT_READ_HTTP_ENTITY + response);
             }
 
             if (statusCode == HttpStatus.SC_OK) {
@@ -333,42 +449,67 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         return null;
     }
 
+    @Override
+    public AccessTokenInfo getTokenMetaData(String accessToken) throws APIManagementException {
+        AccessTokenInfo accessTokenInfo = new AccessTokenInfo();
+        try {
+            // TODO: send authorization header to the introspect endpoint
+            IntrospectInfo introspectInfo = introspectionClient.introspect(accessToken);
+            if (introspectInfo != null) {
+                accessTokenInfo.setAccessToken(accessToken);
+                accessTokenInfo.setTokenValid(introspectInfo.isActive());
+                accessTokenInfo.setIssuedTime(introspectInfo.getIssuedAt());
+                accessTokenInfo.setValidityPeriod(introspectInfo.getExpiryTime() - introspectInfo.getIssuedAt());
+                accessTokenInfo.setEndUserName(introspectInfo.getUsername());
+                accessTokenInfo.setConsumerKey(introspectInfo.getClientId());
+
+                if (StringUtils.isNotEmpty(introspectInfo.getScope())) {
+                    accessTokenInfo.setScope(introspectInfo.getScope().split("\\s+"));
+                }
+
+                accessTokenInfo.addParameter(GluuConstants.ACCESS_TOKEN_ISSUER, introspectInfo.getIssuer());
+                accessTokenInfo.addParameter(GluuConstants.ACCESS_TOKEN_IDENTIFIER, introspectInfo.getJti());
+            }
+            return accessTokenInfo;
+        } catch (KeyManagerClientException e) {
+            throw new APIManagementException("Error occured while introspecting an access token", e);
+        }
+    }
+
+    @Override
+    public Map<String, Set<Scope>> getScopesForAPIS(String apiIdsString) throws APIManagementException {
+        Map<String, Set<Scope>> scopes = new HashMap<>();
+        Map<String, Set<String>> apiToScopeMapping = ApiMgtDAO.getInstance().getScopesForAPIS(apiIdsString);
+        for (Entry<String, Set<String>> entry : apiToScopeMapping.entrySet()) {
+            Set<Scope> apiScopes = new LinkedHashSet<>();
+            for (String scopeName : entry.getValue()) {
+                apiScopes.add(getScopeByName(scopeName));
+            }
+            scopes.put(entry.getKey(), apiScopes);
+        }
+        return scopes;
+    }
+
+    @Override
+    public OAuthApplicationInfo updateApplicationOwner(OAuthAppRequest appInfoDTO, String owner)
+            throws APIManagementException {
+        return appInfoDTO.getOAuthApplicationInfo();
+    }
+
     /**
-     * method to base64 encode credentials (basic auth)
+     * method to handle exceptions
      * 
-     * @param clientId     consumer-key
-     * @param clientSecret consumer-secret
-     * @return {@code String} encoded string
+     * @param msg error message
+     * @throws APIManagementException
      */
-    private static String getEncodedCredentials(String clientId, String clientSecret) {
-        return Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+    private void handleException(String msg) throws APIManagementException {
+        log.error(msg);
+        throw new APIManagementException(msg);
     }
 
     @Override
     public String getNewApplicationConsumerSecret(AccessTokenRequest tokenRequest) throws APIManagementException {
         return null;
-    }
-
-    @Override
-    public AccessTokenInfo getTokenMetaData(String accessToken) throws APIManagementException {
-        AccessTokenInfo accessTokenInfo = new AccessTokenInfo();
-        IntrospectInfo introspectInfo = introspectionClient.introspect(accessToken);
-        if (introspectInfo != null) {
-            accessTokenInfo.setAccessToken(accessToken);
-            accessTokenInfo.setTokenValid(introspectInfo.isActive());
-            accessTokenInfo.setIssuedTime(introspectInfo.getIssuedAt());
-            accessTokenInfo.setValidityPeriod(introspectInfo.getExpiryTime() - introspectInfo.getIssuedAt());
-            accessTokenInfo.setEndUserName(introspectInfo.getUsername());
-            accessTokenInfo.setConsumerKey(introspectInfo.getClientId());
-
-            if (StringUtils.isNotEmpty(introspectInfo.getScope())) {
-                accessTokenInfo.setScope(introspectInfo.getScope().split("\\s+"));
-            }
-
-            accessTokenInfo.addParameter(GluuConstants.ACCESS_TOKEN_ISSUER, introspectInfo.getIssuer());
-            accessTokenInfo.addParameter(GluuConstants.ACCESS_TOKEN_IDENTIFIER, introspectInfo.getJti());
-        }
-        return accessTokenInfo;
     }
 
     @Override
@@ -378,27 +519,8 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
 
     @Override
     public OAuthApplicationInfo mapOAuthApplication(OAuthAppRequest appInfoRequest) throws APIManagementException {
-        return null;
-    }
-
-    @Override
-    public void loadConfiguration(KeyManagerConfiguration keyManagerConfiguration) throws APIManagementException {
-
-        this.configuration = keyManagerConfiguration;
-
-        String dcrEndpoint = (String) this.configuration
-                .getParameter(APIConstants.KeyManager.CLIENT_REGISTRATION_ENDPOINT);
-        String introspectionEndpoint = (String) this.configuration
-                .getParameter(APIConstants.KeyManager.INTROSPECTION_ENDPOINT);
-
-        dcrClient = Feign.builder().client(new ApacheFeignHttpClient(APIUtil.getHttpClient(dcrEndpoint)))
-                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).logger(new Slf4jLogger())
-                .target(DCRClient.class, dcrEndpoint);
-
-        introspectionClient = Feign.builder()
-                .client(new ApacheFeignHttpClient(APIUtil.getHttpClient(introspectionEndpoint)))
-                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).logger(new Slf4jLogger())
-                .target(IntrospectionClient.class, introspectionEndpoint);
+        // TODO: implement to provision to consumer key and secret
+        return appInfoRequest.getOAuthApplicationInfo();
     }
 
     @Override
@@ -440,20 +562,6 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
     }
 
     @Override
-    public Map<String, Set<Scope>> getScopesForAPIS(String apiIdsString) throws APIManagementException {
-        Map<String, Set<Scope>> scopes = new HashMap<>();
-        Map<String, Set<String>> apiToScopeMapping = ApiMgtDAO.getInstance().getScopesForAPIS(apiIdsString);
-        for (Entry<String, Set<String>> entry : apiToScopeMapping.entrySet()) {
-            Set<Scope> apiScopes = new LinkedHashSet<>();
-            for (String scopeName : entry.getValue()) {
-                apiScopes.add(getScopeByName(scopeName));
-            }
-            scopes.put(entry.getKey(), apiScopes);
-        }
-        return scopes;
-    }
-
-    @Override
     public void registerScope(Scope scope) throws APIManagementException {
         // not applicable
     }
@@ -483,8 +591,4 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         return false;
     }
 
-    @Override
-    public String getType() {
-        return GluuConstants.GLUU_TYPE;
-    }
 }

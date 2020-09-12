@@ -23,19 +23,28 @@ public class GluuConnectorConfiguration implements KeyManagerConnectorConfigurat
 
     @Override
     public List<ConfigurationDto> getConnectionConfigurations() {
+        // TODO: configure the Gluu server to not to trust the client and implement the
+        // body
         return new ArrayList<>();
     }
 
     @Override
     public List<ConfigurationDto> getApplicationConfigurations() {
         List<ConfigurationDto> configurationDtoList = new ArrayList<>();
-        configurationDtoList.add(new ConfigurationDto("response_types", "Response Type", "select",
-                "Type of token response", "", false, false, Arrays.asList("token", "code", "id_token"), true));
+        // application types
+        configurationDtoList.add(new ConfigurationDto("application_type", "Application Type", "select",
+                "Type Of Application to create", "web", false, false, Arrays.asList("web", "native"), false));
 
+        // response types
+        configurationDtoList.add(new ConfigurationDto("response_types", "Response Type", "select",
+                "Type of token response", "", false, false, Arrays.asList("token code", "code id_token",
+                        "token id_token", "token", "code", "token code id_token", "id_token"), true));
+
+        // token endpoint authentication method
         configurationDtoList.add(new ConfigurationDto("token_endpoint_auth_method",
                 "Token endpoint Authentication Method", "select", "How to Authenticate Token Endpoint",
-                "client_secret_basic", true, false, Arrays.asList("client_secret_basic", "client_secret_post",
-                        "client_secret_jwt", "tls_client_auth", "private_key_jwt", "self_signed_tls_client_auth"),
+                "client_secret_basic", true, false,
+                Arrays.asList("client_secret_basic", "client_secret_post", "client_secret_jwt", "private_key_jwt"),
                 false));
         return configurationDtoList;
     }
@@ -48,6 +57,16 @@ public class GluuConnectorConfiguration implements KeyManagerConnectorConfigurat
     @Override
     public String getDisplayName() {
         return GluuConstants.GLUU_DISPLAY_NAME;
+    }
+
+    @Override
+    public String getDefaultConsumerKeyClaim() {
+        return GluuConstants.CONSUMER_KEY_CLAIM;
+    }
+
+    @Override
+    public String getDefaultScopesClaim() {
+        return GluuConstants.SCOPE_CLAIM;
     }
 
 }
