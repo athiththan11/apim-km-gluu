@@ -45,7 +45,6 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.AbstractKeyManager;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
-import org.wso2.carbon.apimgt.impl.kmclient.KMClientErrorDecoder;
 import org.wso2.carbon.apimgt.impl.kmclient.KeyManagerClientException;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.user.core.UserCoreConstants;
@@ -68,9 +67,10 @@ import feign.slf4j.Slf4jLogger;
  */
 public class GluuKeyManagerClient extends AbstractKeyManager {
 
-    private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
     private DCRClient dcrClient;
     private IntrospectionClient introspectionClient;
+    
+    private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
 
     /**
      * method to base64 encode credentials (basic auth)
@@ -127,7 +127,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                     return createOAuthApplicationInfo(createdApplication);
                 }
             } catch (KeyManagerClientException e) {
-                handleException("Error occured while trying to create a Gluu client", e);
+                handleException("Error occurred while trying to create a Gluu client", e);
             }
         }
         return null;
@@ -270,7 +270,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                         return createOAuthApplicationInfo(updatedApplication);
                     }
                 } catch (KeyManagerClientException e) {
-                    handleException("Error occured while trying to update the Gluu client for the given consumer key: "
+                    handleException("Error occurred while trying to update the Gluu client for the given consumer key: "
                             + clientId, e);
                 }
             }
@@ -327,7 +327,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 dcrClient.deleteApplication(consumerKey, registrationAccessToken);
             } catch (KeyManagerClientException e) {
                 handleException(
-                        "Error occured while deleting the Gluu client for the given consumer key: " + consumerKey, e);
+                        "Error occurred while deleting the Gluu client for the given consumer key: " + consumerKey, e);
             }
 
         }
@@ -354,7 +354,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 }
             } catch (KeyManagerClientException e) {
                 handleException(
-                        "Error occured while retrieving the Gluu client for the given consumer key: " + consumerKey, e);
+                        "Error occurred while retrieving the Gluu client for the given consumer key: " + consumerKey, e);
             }
         }
         return null;
@@ -443,7 +443,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         } catch (UnsupportedEncodingException e) {
             handleException(GluuConstants.ERROR_UNSUPPORTED_ENCODING_METHOD, e);
         } catch (IOException e) {
-            handleException(GluuConstants.ERROR_ERROR_OCCURED_WHILE_READING, e);
+            handleException(GluuConstants.ERROR_ERROR_OCCURRED_WHILE_READING, e);
         }
 
         return null;
@@ -472,7 +472,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
             }
             return accessTokenInfo;
         } catch (KeyManagerClientException e) {
-            throw new APIManagementException("Error occured while introspecting an access token", e);
+            throw new APIManagementException("Error occurred while introspecting an access token", e);
         }
     }
 

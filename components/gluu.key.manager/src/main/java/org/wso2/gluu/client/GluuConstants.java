@@ -27,7 +27,7 @@ public final class GluuConstants {
     public static final String SCOPE_CLAIM = "scope";
 
     public static final String ERROR_COULD_NOT_READ_HTTP_ENTITY = "Could not read HTTP entity for response ";
-    public static final String ERROR_ERROR_OCCURED_WHILE_READING = "Error occured while reading or closing the buffer reader";
+    public static final String ERROR_ERROR_OCCURRED_WHILE_READING = "Error occurred while reading or closing the buffer reader";
     public static final String ERROR_UNSUPPORTED_ENCODING_METHOD = "Encoding method is not supported";
 
 }
