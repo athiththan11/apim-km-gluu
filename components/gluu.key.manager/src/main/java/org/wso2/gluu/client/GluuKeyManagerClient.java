@@ -260,8 +260,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
 
                 try {
                     if (log.isDebugEnabled()) {
-                        log.debug("Updating the Gluu client with Consumer Key: " + clientId
-                                + ", Registration Access Token: " + registrationAccessToken + ", Client Info: "
+                        log.debug("Updating the Gluu client with Consumer Key: " + clientId + ", Client Info: "
                                 + clientInfo.toString());
                     }
 
@@ -320,8 +319,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
         if (registrationAccessToken != null) {
             try {
                 if (log.isDebugEnabled()) {
-                    log.debug("Deleting the Gluu client with Consumer Key: " + consumerKey
-                            + ", Registration Access Token:" + registrationAccessToken);
+                    log.debug("Deleting the Gluu client with Consumer Key: " + consumerKey);
                 }
 
                 dcrClient.deleteApplication(consumerKey, registrationAccessToken);
@@ -344,8 +342,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
             ClientInfo clientInfo;
             try {
                 if (log.isDebugEnabled()) {
-                    log.debug("Retrieving the Gluu client with Consumer Key: " + consumerKey
-                            + ", Registration Access Token: " + registrationAccessToken);
+                    log.debug("Retrieving the Gluu client with Consumer Key: " + consumerKey);
                 }
 
                 clientInfo = dcrClient.getApplication(consumerKey, registrationAccessToken);
@@ -354,7 +351,8 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 }
             } catch (KeyManagerClientException e) {
                 handleException(
-                        "Error occurred while retrieving the Gluu client for the given consumer key: " + consumerKey, e);
+                        "Error occurred while retrieving the Gluu client for the given consumer key: " + consumerKey,
+                        e);
             }
         }
         return null;
