@@ -45,12 +45,12 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.AbstractKeyManager;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.kmclient.ApacheFeignHttpClient;
+import org.wso2.carbon.apimgt.impl.kmclient.KMClientErrorDecoder;
 import org.wso2.carbon.apimgt.impl.kmclient.KeyManagerClientException;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
-import org.wso2.gluu.client.decoder.GluuKMErrorDecoder;
 import org.wso2.gluu.client.kmclient.DCRClient;
 import org.wso2.gluu.client.kmclient.IntrospectionClient;
 import org.wso2.gluu.client.model.AccessTokenResponse;
@@ -69,7 +69,7 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
 
     private DCRClient dcrClient;
     private IntrospectionClient introspectionClient;
-    
+
     private static final Log log = LogFactory.getLog(GluuKeyManagerClient.class);
 
     /**
@@ -98,15 +98,13 @@ public class GluuKeyManagerClient extends AbstractKeyManager {
                 .getParameter(APIConstants.KeyManager.INTROSPECTION_ENDPOINT);
 
         dcrClient = Feign.builder().client(new ApacheFeignHttpClient(APIUtil.getHttpClient(dcrEndpoint)))
-                .encoder(new GsonEncoder()).decoder(new GsonDecoder())
-                .errorDecoder(new GluuKMErrorDecoder())
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).errorDecoder(new KMClientErrorDecoder())
                 // .errorDecoder(new KMClientErrorDecoder())
                 .logger(new Slf4jLogger()).target(DCRClient.class, dcrEndpoint);
 
         introspectionClient = Feign.builder()
                 .client(new ApacheFeignHttpClient(APIUtil.getHttpClient(introspectionEndpoint)))
-                .encoder(new GsonEncoder()).decoder(new GsonDecoder())
-                .errorDecoder(new GluuKMErrorDecoder())
+                .encoder(new GsonEncoder()).decoder(new GsonDecoder()).errorDecoder(new KMClientErrorDecoder())
                 // .errorDecoder(new KMClientErrorDecoder())
                 .logger(new Slf4jLogger()).target(IntrospectionClient.class, introspectionEndpoint);
     }
