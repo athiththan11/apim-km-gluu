@@ -7,8 +7,10 @@ import feign.Headers;
 import feign.Param;
 import feign.RequestLine;
 
-public interface IntrospectionClient {
+public interface IntrospectClient {
+
     @RequestLine("POST")
     @Headers("Content-type: application/x-www-form-urlencoded")
     public IntrospectInfo introspect(@Param("token") String token) throws KeyManagerClientException;
+
 }

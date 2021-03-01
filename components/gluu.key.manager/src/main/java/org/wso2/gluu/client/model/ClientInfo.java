@@ -140,10 +140,10 @@ public class ClientInfo {
 
     @Override
     public String toString() {
-        return "ClientInfo [applicationType=" + applicationType + ", clientId=" + clientId + ", clientName="
-                + clientName + ", grantTypes=" + grantTypes + ", redirectUris=" + redirectUris + ", responseTypes="
-                + responseTypes + ", subjectType=" + subjectType + ", tokenEndpointAuthMethod="
-                + tokenEndpointAuthMethod + "]";
+        return "Gluu ClientInfo [accessTokenAsJWT=" + accessTokenAsJWT + ", applicationType=" + applicationType
+                + ", clientId=" + clientId + ", clientIdIssuedTime=" + clientIdIssuedTime + ", clientName=" + clientName
+                + ", grantTypes=" + grantTypes + ", redirectUris=" + redirectUris + ", responseTypes=" + responseTypes
+                + ", subjectType=" + subjectType + ", tokenEndpointAuthMethod=" + tokenEndpointAuthMethod + "]";
     }
 
 }
