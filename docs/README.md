@@ -84,3 +84,17 @@ We will be using the OpenID Configuration endpoint URL to configure the key mana
     ![Gluu Application Configurations](assets/gluu-application-configurations.png)
 
 5. Click on `Generate Keys` to creat a client in the Gluu server and to generate the Consumer Key and Secret and a JWT access token.
+
+### Generate Access Token with Scopes
+
+If you have any APIs protected with scopes, then please follow the given instructions to configure the Gluu server to include and generate access token with the required scopes.
+
+> **Assumption:** We have an existing API with a scope called `'menu'` engaged to one of the API resource
+
+1. Login to the Gluu server and go to `OpenID Connect` > `Scopes` screen and click on `Add Scope` to create
+2. Enter the scope name in the `Display Name` field and click on `Add` to save the scope
+3. Then, navigate to `OpenID Connect` > `Clients` and open and edit the respective Gluu client that has been created in the Gluu server (respective to the Devportal Application)
+4. Under the `Scopes` section, click on `Add Scope` and add the newly created `menu` scope to the list. This is to enable and allow the respective client to issue the respective scope when generating an Access Token
+5. Once the scopes are updated, click on `Update` to update the Gluu client
+
+Now, you can successfully generate the Access Token from Gluu server with the required scopes (ex: `menu`) and invoke the respective API in the API Manager server.
