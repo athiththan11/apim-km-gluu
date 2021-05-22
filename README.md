@@ -1,7 +1,5 @@
 # Integrate Gluu as a Third-Party Key Manager with WSO2 API Manager
 
-[:construction:] Work in-progress
-
 A third-party key manager implementation that allows to integrate the WSO2 API Developer portal with Gluu authorization server to manage OAuth clients and tokens required by WSO2 API Manager. This repo contains a sample key manager (client) implementation that consumes the APIs exposed by Gluu.
 
 > Kindly note that this implementation & feature is supported from WSO2 API Manager v3.2.0 onwards
